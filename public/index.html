@@ -763,11 +763,11 @@
         <table>
           <thead>
             <tr>
-              <th>Funcionário</th><th>Data</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Horas</th><th>Observação</th><th>Editado em</th><th></th>
+              <th>Funcionário</th><th>Data</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Horas</th><th>Extra</th><th>Motivo</th><th>Observação</th><th></th>
             </tr>
           </thead>
           <tbody id="approvalsTbody">
-            <tr class="empty-row"><td colspan="9">Nenhum registro pendente.</td></tr>
+            <tr class="empty-row"><td colspan="10">Nenhum registro pendente.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1168,7 +1168,8 @@
       pill.classList.add('done');
       var min = calcMinutosRaw(currentRecord);
       var hrs = (min != null && min >= 0) ? formatMin(min) + ' trabalhadas' : 'confira os horários';
-      text.textContent = 'Jornada encerrada às ' + timeStr(currentRecord.saida) + ' · ' + hrs + '.';
+      var pendingNote = currentRecord.status === 'pendente' ? ' · pendente de aprovação do gestor' : '';
+      text.textContent = 'Jornada encerrada às ' + timeStr(currentRecord.saida) + ' · ' + hrs + pendingNote + '.';
     }
 
     var canAct = connOk;
@@ -1209,6 +1210,9 @@
     apiSend('POST', '/api/records/punch', body).then(function(rec){
       currentRecord = rec;
       renderKiosk();
+      if(type === 'saida' && rec && rec.status === 'pendente'){
+        showToast('Jornada com hora extra registrada — aguardando aprovação do gestor.');
+      }
     }).catch(function(err){
       console.error(err);
       showToast(err.message || 'Não foi possível registrar.');
@@ -1452,13 +1456,16 @@
   function renderApprovals(){
     var tbody = $('approvalsTbody');
     if(approvalRecords.length === 0){
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Nenhum registro pendente.</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Nenhum registro pendente.</td></tr>';
       return;
     }
     tbody.innerHTML = approvalRecords.map(function(r){
       var min = calcMinutosRaw(r);
       var hoursCell = min == null ? '—' : (min < 0 ? 'verificar' : formatMin(min));
+      var extra = extraMinutos(min);
+      var extraCell = extra > 0 ? '<span class="extra-hours">+' + formatMin(extra) + '</span>' : '—';
       var intervalo = (r.inicioIntervalo || r.fimIntervalo) ? (timeStr(r.inicioIntervalo) + '–' + timeStr(r.fimIntervalo)) : '—';
+      var motivo = r.editadoManualmente ? 'Edição manual' : (extra > 0 ? 'Hora extra' : 'Revisão');
       var obs = r.observacao ? r.observacao : '';
       return '<tr>' +
         '<td class="emp">' + escapeHtml(r.employeeName || '—') + '</td>' +
@@ -1467,8 +1474,9 @@
         '<td class="mono">' + intervalo + '</td>' +
         '<td class="mono">' + timeStr(r.saida) + '</td>' +
         '<td class="mono">' + hoursCell + '</td>' +
+        '<td class="mono">' + extraCell + '</td>' +
+        '<td>' + escapeHtml(motivo) + '</td>' +
         '<td class="obs-cell" title="' + escapeHtml(obs) + '">' + escapeHtml(obs || '—') + '</td>' +
-        '<td class="mono">' + timeStr(r.editadoEm) + '</td>' +
         '<td style="white-space:nowrap;">' +
           '<button class="edit-btn" data-action="approve" data-id="' + r.id + '">Aprovar</button> ' +
           '<button class="edit-btn" data-action="reject" data-id="' + r.id + '">Rejeitar</button>' +

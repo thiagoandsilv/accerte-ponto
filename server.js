@@ -43,6 +43,15 @@ const PUNCH_FIELDS = {
 
 const HORAS_NORMAIS_MIN = 8 * 60;
 
+function calcMinutosRaw(entrada, inicioIntervalo, fimIntervalo, saida) {
+  if (!entrada || !saida) return null;
+  let total = (new Date(saida) - new Date(entrada)) / 60000;
+  if (inicioIntervalo && fimIntervalo) {
+    total -= (new Date(fimIntervalo) - new Date(inicioIntervalo)) / 60000;
+  }
+  return Math.round(total);
+}
+
 function employeeRowToJson(row) {
   return { id: String(row.id), name: row.name, isAdmin: !!row.is_admin, createdAt: row.created_at };
 }
@@ -313,7 +322,22 @@ app.post('/api/records/punch', requireAuth, async (req, res, next) => {
       `UPDATE records SET ${column} = now(), updated_at = now() WHERE id = $1 RETURNING *`,
       [existing.id]
     );
-    const withName = await pool.query('SELECT r.*, e.name AS employee_name FROM records r JOIN employees e ON e.id = r.employee_id WHERE r.id = $1', [upd.rows[0].id]);
+    let row = upd.rows[0];
+
+    // Jornada com hora extra (acima do limite diário) precisa de aprovação do gestor,
+    // mesmo quando o ponto foi batido normalmente (sem edição manual).
+    if (type === 'saida') {
+      const min = calcMinutosRaw(row.entrada, row.inicio_intervalo, row.fim_intervalo, row.saida);
+      if (min != null && min > HORAS_NORMAIS_MIN && row.status !== 'pendente') {
+        const flagged = await pool.query(
+          `UPDATE records SET status = 'pendente' WHERE id = $1 RETURNING *`,
+          [row.id]
+        );
+        row = flagged.rows[0];
+      }
+    }
+
+    const withName = await pool.query('SELECT r.*, e.name AS employee_name FROM records r JOIN employees e ON e.id = r.employee_id WHERE r.id = $1', [row.id]);
     res.status(200).json(recordRowToJson(withName.rows[0]));
   } catch (err) { next(err); }
 });

@@ -54,19 +54,27 @@ essa senha inicial normalmente depois (trocar a própria senha ainda não está 
 ## Gestor e aprovações
 
 Ao cadastrar uma pessoa você pode marcá-la como gestora ("Esta pessoa também é gestora"). Gestores veem uma
-aba extra, **Aprovações**: toda edição manual de um registro (feita pelos Relatórios) fica com status
-`pendente` até um gestor aprovar ou rejeitar. Pontos batidos normalmente (inclusive retroativos) não passam
-por aprovação — só edições manuais.
+aba extra, **Aprovações**, com dois tipos de pendência:
+
+- **Edição manual** — toda vez que alguém edita um registro pelos Relatórios, ele fica `pendente` até um
+  gestor aprovar ou rejeitar.
+- **Hora extra** — quando alguém bate a saída e a jornada do dia passa de 8h, o registro também fica
+  `pendente` automaticamente (mesmo sem nenhuma edição manual), até um gestor aprovar ou rejeitar.
+
+A coluna "Motivo" na aba Aprovações mostra qual dos dois casos gerou a pendência. Pontos batidos normalmente
+que não passam de 8h — incluindo os retroativos — não precisam de aprovação.
 
 ## Ponto retroativo
 
 Na tela "Bater ponto" tem um seletor de data (padrão: hoje). Dá pra escolher um dia anterior e registrar
 entrada/intervalo/saída normalmente para aquele dia, caso a pessoa tenha esquecido de bater o ponto na hora.
+Se o resultado passar de 8h, cai na aprovação de hora extra do mesmo jeito.
 
 ## Horas extras
 
-Qualquer jornada acima de 8h no dia é contabilizada como hora extra automaticamente (sem precisar de
-aprovação separada) — aparece como uma coluna "Extra" nos relatórios e como total no painel de estatísticas.
+Qualquer jornada acima de 8h no dia é contabilizada como hora extra automaticamente — aparece como uma
+coluna "Extra" nos relatórios, como total no painel de estatísticas, e o registro correspondente vai para a
+aba Aprovações até um gestor validar.
 
 ## API
 

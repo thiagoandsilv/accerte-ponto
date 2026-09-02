@@ -1,4 +1,4 @@
-# Ponto Certo
+# Ponto Accerte
 
 Kiosk de ponto compartilhado para equipes: cada pessoa seleciona seu nome e registra entrada, intervalo e saída; um painel de relatórios mostra o histórico com totais de horas e exportação em CSV.
 

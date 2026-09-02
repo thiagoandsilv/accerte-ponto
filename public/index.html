@@ -75,6 +75,7 @@
   }
 
   *{ box-sizing:border-box; }
+  [hidden]{ display:none !important; }
   body{
     margin:0;
     background:var(--bg);
@@ -121,6 +122,8 @@
   .app-header h1{ font-size:20px; font-weight:800; letter-spacing:-.01em; }
   .app-header .tagline{ font-size:12.5px; color:var(--text-secondary); margin-top:1px; }
 
+  .header-side{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+
   .conn-status{
     font-size:12px;
     color:var(--text-faint);
@@ -131,6 +134,16 @@
   .conn-dot{ width:7px; height:7px; border-radius:50%; background:var(--text-faint); }
   .conn-status.ok .conn-dot{ background:var(--success); }
   .conn-status.bad .conn-dot{ background:var(--danger); }
+
+  .user-chip{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:13px;
+    font-weight:600;
+  }
+  .user-chip .user-name{ color:var(--text); }
+  .user-chip .user-name::before{ content:'👤 '; font-size:11px; }
 
   .tabs{
     display:inline-flex;
@@ -242,31 +255,6 @@
   }
   .icon-btn:hover{ background:var(--accent-wash); color:var(--accent); }
 
-  .add-person-row{
-    display:none;
-    gap:8px;
-    margin:-8px 0 16px;
-  }
-  .add-person-row.show{ display:flex; }
-  .add-person-row input{
-    flex:1;
-    background:var(--surface-alt);
-    border:1px solid var(--border);
-    border-radius:var(--radius-sm);
-    padding:10px 12px;
-    color:var(--text);
-  }
-  .add-person-row button{
-    border:none;
-    background:var(--accent);
-    color:var(--accent-contrast);
-    font-weight:700;
-    font-size:13px;
-    padding:0 14px;
-    border-radius:var(--radius-sm);
-    cursor:pointer;
-  }
-
   .status-pill{
     display:flex;
     align-items:center;
@@ -351,6 +339,41 @@
   .obs-save:disabled{ opacity:.45; cursor:not-allowed; }
 
   .hint{ text-align:center; color:var(--text-faint); font-size:12px; margin-top:14px; }
+
+  /* ---- Login / cadastro ---- */
+  .auth-field{ margin-bottom:12px; }
+  .auth-field label{ display:block; font-size:12.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; }
+  .auth-field input, .auth-field select{
+    width:100%;
+    background:var(--surface-alt);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    padding:11px 12px;
+    color:var(--text);
+  }
+  .auth-error{
+    color:var(--danger);
+    font-size:12.5px;
+    font-weight:600;
+    margin:2px 0 12px;
+  }
+  .link-btn{
+    border:none;
+    background:transparent;
+    color:var(--accent);
+    font-weight:600;
+    font-size:12.5px;
+    cursor:pointer;
+    padding:4px 0;
+    text-decoration:underline;
+  }
+  .register-block{
+    margin-top:16px;
+    padding-top:16px;
+    border-top:1px dashed var(--border);
+  }
+  .register-block h3{ font-size:14px; margin-bottom:2px; }
+  .register-block .sub-note{ font-size:12px; color:var(--text-faint); margin-bottom:14px; }
 
   /* ---- Reports ---- */
   .report-controls{
@@ -531,114 +554,160 @@
         <div class="tagline">Registro de jornada da equipe</div>
       </div>
     </div>
-    <div class="conn-status" id="connStatus"><span class="conn-dot"></span><span id="connLabel">Conectando…</span></div>
+    <div class="header-side">
+      <div class="conn-status" id="connStatus"><span class="conn-dot"></span><span id="connLabel">Conectando…</span></div>
+      <div class="user-chip" id="userChip" hidden>
+        <span class="user-name" id="userChipName"></span>
+        <button type="button" class="edit-btn" id="logoutBtn">Sair</button>
+      </div>
+    </div>
   </header>
 
   <div class="banner" id="dbBanner">Não foi possível conectar ao servidor. Recarregue a página para tentar novamente.</div>
 
-  <nav class="tabs" role="tablist">
-    <button class="tab-btn active" id="tabBtnKiosk" role="tab" aria-selected="true">Bater ponto</button>
-    <button class="tab-btn" id="tabBtnReport" role="tab" aria-selected="false">Relatórios</button>
-  </nav>
-
-  <!-- KIOSK PANEL -->
-  <section class="panel active" id="panelKiosk">
-    <div class="kiosk">
-      <div class="card clock-block">
-        <div class="clock-time tabular" id="liveClock">--:--:--</div>
-        <div class="clock-date" id="liveDate">—</div>
-      </div>
-
-      <div class="card">
-        <div class="field-row">
-          <select id="employeeSelect" aria-label="Selecione seu nome">
+  <!-- LOGIN -->
+  <section class="kiosk" id="loginShell">
+    <div class="card clock-block">
+      <div class="clock-time tabular" id="liveClockLogin">--:--:--</div>
+      <div class="clock-date" id="liveDateLogin">—</div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:17px; margin-bottom:4px;">Entrar</h2>
+      <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:18px;">Selecione seu nome e digite sua senha para bater ponto.</div>
+      <form id="loginForm" novalidate>
+        <div class="auth-field">
+          <label for="loginNameSelect">Nome</label>
+          <select id="loginNameSelect" required>
             <option value="">Selecione seu nome…</option>
           </select>
-          <button class="icon-btn" id="addPersonToggle" type="button" title="Adicionar pessoa">+</button>
         </div>
-        <div class="add-person-row" id="addPersonRow">
-          <input type="text" id="newPersonName" placeholder="Nome completo" maxlength="60">
-          <button id="addPersonConfirm" type="button">Adicionar</button>
+        <div class="auth-field" style="margin-bottom:8px;">
+          <label for="loginPassword">Senha</label>
+          <input type="password" id="loginPassword" autocomplete="current-password" required>
         </div>
+        <div class="auth-error" id="loginError" hidden></div>
+        <button type="submit" class="punch-btn primary" id="loginSubmitBtn" style="width:100%;">Entrar</button>
+      </form>
 
-        <div class="status-pill" id="statusPill">
-          <span class="dot"></span>
-          <span id="statusText">Selecione seu nome para começar.</span>
-        </div>
-
-        <div class="punch-grid" id="punchGrid">
-          <button class="punch-btn primary" id="btnEntrada" disabled>
-            Registrar entrada
-            <span class="sub" id="clockLabelEntrada">—</span>
-          </button>
-          <button class="punch-btn" id="btnIniciarIntervalo" disabled>
-            Iniciar intervalo
-            <span class="sub">Pausa / almoço</span>
-          </button>
-          <button class="punch-btn" id="btnFimIntervalo" disabled>
-            Finalizar intervalo
-            <span class="sub">Voltar ao trabalho</span>
-          </button>
-          <button class="punch-btn" id="btnSaida" disabled>
-            Registrar saída
-            <span class="sub">Encerrar jornada</span>
-          </button>
-        </div>
-
-        <ul class="timeline" id="timeline">
-          <li class="empty">Nenhum registro hoje ainda.</li>
-        </ul>
-
-        <div class="obs-block">
-          <label for="obsInput">Observação do dia (opcional)</label>
-          <textarea id="obsInput" placeholder="Ex.: atraso justificado por trânsito, saída antecipada com autorização…" disabled></textarea>
-          <button class="obs-save" id="obsSaveBtn" disabled>Salvar observação</button>
-        </div>
+      <div class="register-block">
+        <button type="button" class="link-btn" id="toggleRegister">+ Cadastrar nova pessoa</button>
+        <form id="registerForm" novalidate hidden style="margin-top:12px;">
+          <h3>Cadastrar nova pessoa</h3>
+          <div class="sub-note">Só o administrador pode cadastrar. A pessoa usa esse nome e senha para entrar depois.</div>
+          <div class="auth-field">
+            <label for="regName">Nome completo</label>
+            <input type="text" id="regName" maxlength="60" autocomplete="off" required>
+          </div>
+          <div class="auth-field">
+            <label for="regPassword">Senha inicial (mín. 4 caracteres)</label>
+            <input type="password" id="regPassword" autocomplete="new-password" required>
+          </div>
+          <div class="auth-field" style="margin-bottom:8px;">
+            <label for="regAdminPassword">Senha de administrador</label>
+            <input type="password" id="regAdminPassword" autocomplete="off" required>
+          </div>
+          <div class="auth-error" id="registerError" hidden></div>
+          <button type="submit" class="btn primary" id="registerSubmitBtn" style="width:100%;">Cadastrar e entrar</button>
+        </form>
       </div>
-      <div class="hint">Este ponto é compartilhado pela equipe — confira se selecionou seu próprio nome antes de registrar.</div>
     </div>
   </section>
 
-  <!-- REPORT PANEL -->
-  <section class="panel" id="panelReport">
-    <div class="report-controls">
-      <div class="report-filters">
-        <select id="reportEmployeeFilter"><option value="all">Toda a equipe</option></select>
-        <div class="chip-group" id="rangeChips">
-          <button class="chip" data-range="today">Hoje</button>
-          <button class="chip active" data-range="week">Esta semana</button>
-          <button class="chip" data-range="month">Este mês</button>
+  <!-- APP (visível após login) -->
+  <div id="appShell" hidden>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" id="tabBtnKiosk" role="tab" aria-selected="true">Bater ponto</button>
+      <button class="tab-btn" id="tabBtnReport" role="tab" aria-selected="false">Relatórios</button>
+    </nav>
+
+    <!-- KIOSK PANEL -->
+    <section class="panel active" id="panelKiosk">
+      <div class="kiosk">
+        <div class="card clock-block">
+          <div class="clock-time tabular" id="liveClock">--:--:--</div>
+          <div class="clock-date" id="liveDate">—</div>
         </div>
-        <input type="date" id="rangeStart">
-        <span style="color:var(--text-faint)">–</span>
-        <input type="date" id="rangeEnd">
+
+        <div class="card">
+          <div class="status-pill" id="statusPill">
+            <span class="dot"></span>
+            <span id="statusText">Carregando…</span>
+          </div>
+
+          <div class="punch-grid" id="punchGrid">
+            <button class="punch-btn primary" id="btnEntrada" disabled>
+              Registrar entrada
+              <span class="sub" id="clockLabelEntrada">—</span>
+            </button>
+            <button class="punch-btn" id="btnIniciarIntervalo" disabled>
+              Iniciar intervalo
+              <span class="sub">Pausa / almoço</span>
+            </button>
+            <button class="punch-btn" id="btnFimIntervalo" disabled>
+              Finalizar intervalo
+              <span class="sub">Voltar ao trabalho</span>
+            </button>
+            <button class="punch-btn" id="btnSaida" disabled>
+              Registrar saída
+              <span class="sub">Encerrar jornada</span>
+            </button>
+          </div>
+
+          <ul class="timeline" id="timeline">
+            <li class="empty">Nenhum registro hoje ainda.</li>
+          </ul>
+
+          <div class="obs-block">
+            <label for="obsInput">Observação do dia (opcional)</label>
+            <textarea id="obsInput" placeholder="Ex.: atraso justificado por trânsito, saída antecipada com autorização…" disabled></textarea>
+            <button class="obs-save" id="obsSaveBtn" disabled>Salvar observação</button>
+          </div>
+        </div>
+        <div class="hint">Seu ponto fica vinculado à sua conta — não compartilhe sua senha com colegas.</div>
       </div>
-      <button class="export-btn" id="exportBtn">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
-        Exportar CSV
-      </button>
-    </div>
+    </section>
 
-    <div class="stat-grid">
-      <div class="stat-tile"><div class="label">Horas no período</div><div class="value tabular" id="statTotalHoras">0h00</div></div>
-      <div class="stat-tile"><div class="label">Jornadas completas</div><div class="value tabular" id="statDias">0</div></div>
-      <div class="stat-tile"><div class="label">Média por jornada</div><div class="value tabular" id="statMedia">0h00</div></div>
-      <div class="stat-tile warn"><div class="label">Jornadas em aberto</div><div class="value tabular" id="statAbertas">0</div></div>
-    </div>
+    <!-- REPORT PANEL -->
+    <section class="panel" id="panelReport">
+      <div class="report-controls">
+        <div class="report-filters">
+          <select id="reportEmployeeFilter"><option value="all">Toda a equipe</option></select>
+          <div class="chip-group" id="rangeChips">
+            <button class="chip" data-range="today">Hoje</button>
+            <button class="chip active" data-range="week">Esta semana</button>
+            <button class="chip" data-range="month">Este mês</button>
+          </div>
+          <input type="date" id="rangeStart">
+          <span style="color:var(--text-faint)">–</span>
+          <input type="date" id="rangeEnd">
+        </div>
+        <button class="export-btn" id="exportBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
+          Exportar CSV
+        </button>
+      </div>
 
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Funcionário</th><th>Data</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Horas</th><th>Observação</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="reportTbody">
-          <tr class="empty-row"><td colspan="8">Sem registros no período selecionado.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+      <div class="stat-grid">
+        <div class="stat-tile"><div class="label">Horas no período</div><div class="value tabular" id="statTotalHoras">0h00</div></div>
+        <div class="stat-tile"><div class="label">Jornadas completas</div><div class="value tabular" id="statDias">0</div></div>
+        <div class="stat-tile"><div class="label">Média por jornada</div><div class="value tabular" id="statMedia">0h00</div></div>
+        <div class="stat-tile warn"><div class="label">Jornadas em aberto</div><div class="value tabular" id="statAbertas">0</div></div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Funcionário</th><th>Data</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Horas</th><th>Observação</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="reportTbody">
+            <tr class="empty-row"><td colspan="8">Sem registros no período selecionado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 </div>
 
 <div class="modal-overlay" id="editOverlay">
@@ -669,12 +738,13 @@
   'use strict';
 
   var employees = [];
-  var selectedEmployeeId = null;
+  var currentUser = null;
   var currentRecord = null;
   var reportRecords = [];
   var reportRange = { start: null, end: null };
   var editingRecordId = null;
   var connOk = false;
+  var pollingStarted = false;
 
   function $(id){ return document.getElementById(id); }
   function pad(n){ return String(n).padStart(2,'0'); }
@@ -745,9 +815,12 @@
 
   function tickClock(){
     var now = new Date();
-    $('liveClock').textContent = now.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    var time = now.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
     var ds = now.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
-    $('liveDate').textContent = ds;
+    if($('liveClock')) $('liveClock').textContent = time;
+    if($('liveDate')) $('liveDate').textContent = ds;
+    if($('liveClockLogin')) $('liveClockLogin').textContent = time;
+    if($('liveDateLogin')) $('liveDateLogin').textContent = ds;
   }
 
   function setupTabs(){
@@ -773,13 +846,24 @@
     if(state === 'ok'){ el.classList.add('ok'); label.textContent = 'Conectado'; $('dbBanner').classList.remove('show'); }
     else if(state === 'bad'){ el.classList.add('bad'); label.textContent = 'Sem conexão'; $('dbBanner').classList.add('show'); }
     else { label.textContent = 'Conectando…'; }
+    renderKiosk();
   }
 
   /* ---------------- API helpers ---------------- */
 
+  function handleSessionExpired(){
+    if(currentUser){
+      currentUser = null;
+      currentRecord = null;
+      showLogin();
+      showToast('Sua sessão expirou. Faça login novamente.');
+    }
+  }
+
   function apiGet(url){
     return fetch(url).then(function(r){
-      if(!r.ok) return r.json().catch(function(){ return {}; }).then(function(j){ throw new Error(j.error || ('Erro ' + r.status)); });
+      if(r.status === 401) handleSessionExpired();
+      if(!r.ok) return r.json().catch(function(){ return {}; }).then(function(j){ var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; });
       return r.json();
     });
   }
@@ -789,26 +873,25 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {})
     }).then(function(r){
+      if(r.status === 401) handleSessionExpired();
       if(!r.ok) return r.json().catch(function(){ return {}; }).then(function(j){ var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; });
       return r.json();
     });
   }
 
-  /* ---------------- Employees ---------------- */
+  /* ---------------- Employees (lista pública, usada no login) ---------------- */
 
   function renderEmployeeOptions(){
-    var sel = $('employeeSelect');
-    var prev = selectedEmployeeId;
-    sel.innerHTML = '<option value="">Selecione seu nome…</option>';
+    var loginSel = $('loginNameSelect');
+    var prevLogin = loginSel.value;
+    loginSel.innerHTML = '<option value="">Selecione seu nome…</option>';
     employees.forEach(function(e){
       var o = document.createElement('option');
-      o.value = e.id; o.textContent = e.name;
-      sel.appendChild(o);
+      o.value = e.name; o.textContent = e.name;
+      loginSel.appendChild(o);
     });
-    if(prev && employees.some(function(e){ return e.id === prev; })){
-      sel.value = prev;
-    } else if(prev){
-      selectedEmployeeId = null;
+    if([].slice.call(loginSel.options).some(function(o){ return o.value === prevLogin; })){
+      loginSel.value = prevLogin;
     }
 
     var repSel = $('reportEmployeeFilter');
@@ -835,66 +918,131 @@
     });
   }
 
-  function setupAddPerson(){
-    var toggle = $('addPersonToggle'), row = $('addPersonRow'), input = $('newPersonName'), confirmBtn = $('addPersonConfirm');
-    toggle.addEventListener('click', function(){
-      row.classList.toggle('show');
-      if(row.classList.contains('show')) input.focus();
-    });
-    function doAdd(){
-      var name = input.value.trim();
-      if(!name){ input.focus(); return; }
-      var existing = employees.filter(function(e){ return e.name.toLowerCase() === name.toLowerCase(); })[0];
-      if(existing){
-        selectedEmployeeId = existing.id;
-        $('employeeSelect').value = existing.id;
-        onEmployeeChange();
-        row.classList.remove('show'); input.value = '';
-        return;
-      }
-      confirmBtn.disabled = true;
-      apiSend('POST', '/api/employees', { name: name }).then(function(emp){
-        selectedEmployeeId = emp.id;
-        try{ localStorage.setItem('ponto_certo_employee', selectedEmployeeId); }catch(e){}
-        input.value = '';
-        row.classList.remove('show');
-        return loadEmployees();
-      }).then(function(){
-        refreshToday();
-      }).catch(function(err){
-        console.error(err);
-        showToast('Não foi possível adicionar. Tente novamente.');
-      }).finally(function(){ confirmBtn.disabled = false; });
-    }
-    confirmBtn.addEventListener('click', doAdd);
-    input.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); doAdd(); } });
+  /* ---------------- Autenticação ---------------- */
+
+  function showAuthError(id, msg){
+    var el = $(id);
+    el.textContent = msg;
+    el.hidden = false;
+  }
+  function hideAuthError(id){
+    var el = $(id);
+    el.hidden = true;
+    el.textContent = '';
   }
 
-  function onEmployeeChange(){
-    selectedEmployeeId = $('employeeSelect').value || null;
-    try{ if(selectedEmployeeId) localStorage.setItem('ponto_certo_employee', selectedEmployeeId); }catch(e){}
+  function showApp(){
+    $('loginShell').hidden = true;
+    $('appShell').hidden = false;
+    $('userChip').hidden = false;
+    $('userChipName').textContent = currentUser.name;
+    startPollingIfNeeded();
+    setRange('week');
     refreshToday();
+  }
+
+  function showLogin(){
+    $('appShell').hidden = true;
+    $('userChip').hidden = true;
+    $('loginShell').hidden = false;
+    $('loginPassword').value = '';
+    hideAuthError('loginError');
+  }
+
+  function checkAuth(){
+    return apiGet('/api/me').then(function(user){
+      if(user){
+        currentUser = user;
+        showApp();
+      } else {
+        showLogin();
+      }
+    }).catch(function(err){
+      console.error('auth check error', err);
+      showLogin();
+    });
+  }
+
+  function setupAuthForms(){
+    $('loginForm').addEventListener('submit', function(ev){
+      ev.preventDefault();
+      var name = $('loginNameSelect').value;
+      var password = $('loginPassword').value;
+      hideAuthError('loginError');
+      if(!name || !password){
+        showAuthError('loginError', 'Selecione seu nome e digite sua senha.');
+        return;
+      }
+      var btn = $('loginSubmitBtn');
+      btn.disabled = true;
+      apiSend('POST', '/api/login', { name: name, password: password }).then(function(user){
+        currentUser = user;
+        $('loginPassword').value = '';
+        showApp();
+      }).catch(function(err){
+        showAuthError('loginError', err.message || 'Não foi possível entrar.');
+      }).finally(function(){ btn.disabled = false; });
+    });
+
+    $('toggleRegister').addEventListener('click', function(){
+      var form = $('registerForm');
+      form.hidden = !form.hidden;
+    });
+
+    $('registerForm').addEventListener('submit', function(ev){
+      ev.preventDefault();
+      var name = $('regName').value.trim();
+      var password = $('regPassword').value;
+      var adminPassword = $('regAdminPassword').value;
+      hideAuthError('registerError');
+      if(!name || !password || !adminPassword){
+        showAuthError('registerError', 'Preencha todos os campos.');
+        return;
+      }
+      var btn = $('registerSubmitBtn');
+      btn.disabled = true;
+      apiSend('POST', '/api/employees', { name: name, password: password, adminPassword: adminPassword }).then(function(){
+        return apiSend('POST', '/api/login', { name: name, password: password });
+      }).then(function(user){
+        currentUser = user;
+        $('registerForm').reset();
+        $('registerForm').hidden = true;
+        return loadEmployees().then(function(){ showApp(); });
+      }).catch(function(err){
+        showAuthError('registerError', err.message || 'Não foi possível cadastrar.');
+      }).finally(function(){ btn.disabled = false; });
+    });
+
+    $('logoutBtn').addEventListener('click', function(){
+      apiSend('POST', '/api/logout', {}).then(function(){
+        currentUser = null;
+        currentRecord = null;
+        showLogin();
+      }).catch(function(){
+        currentUser = null;
+        currentRecord = null;
+        showLogin();
+      });
+    });
   }
 
   /* ---------------- Kiosk / today's record ---------------- */
 
   function refreshToday(){
-    if(!selectedEmployeeId){ currentRecord = null; renderKiosk(); return Promise.resolve(); }
+    if(!currentUser) return Promise.resolve();
     var date = localDateStr();
-    return apiGet('/api/records/today?employeeId=' + encodeURIComponent(selectedEmployeeId) + '&date=' + date)
+    return apiGet('/api/records/today?date=' + date)
       .then(function(rec){ currentRecord = rec; renderKiosk(); })
       .catch(function(err){ console.error('today error', err); });
   }
 
   function renderKiosk(){
-    var hasEmployee = !!selectedEmployeeId;
+    if(!currentUser) return;
     var state = deriveState(currentRecord);
     var pill = $('statusPill'), text = $('statusText');
     pill.classList.remove('working','break','done');
 
-    if(!hasEmployee){
-      text.textContent = 'Selecione seu nome para começar.';
-    } else if(state === 'NONE'){
+    if(state === 'NONE'){
       text.textContent = 'Ainda não bateu ponto hoje.';
     } else if(state === 'TRABALHANDO'){
       pill.classList.add('working');
@@ -912,7 +1060,7 @@
       text.textContent = 'Jornada encerrada às ' + timeStr(currentRecord.saida) + ' · ' + hrs + '.';
     }
 
-    var canAct = connOk && hasEmployee;
+    var canAct = connOk;
     $('btnEntrada').disabled = !canAct || state !== 'NONE';
     $('btnIniciarIntervalo').disabled = !canAct || state !== 'TRABALHANDO';
     $('btnFimIntervalo').disabled = !canAct || state !== 'INTERVALO';
@@ -944,9 +1092,9 @@
   }
 
   function punch(type){
-    if(!selectedEmployeeId) return;
+    if(!currentUser) return;
     var date = localDateStr();
-    var body = { employeeId: selectedEmployeeId, date: date, type: type };
+    var body = { date: date, type: type };
     if(type === 'entrada') body.observacao = $('obsInput').value.trim();
     apiSend('POST', '/api/records/punch', body).then(function(rec){
       currentRecord = rec;
@@ -959,7 +1107,6 @@
   }
 
   function setupActionButtons(){
-    $('employeeSelect').addEventListener('change', onEmployeeChange);
     $('btnEntrada').addEventListener('click', function(){ punch('entrada'); });
     $('btnIniciarIntervalo').addEventListener('click', function(){ punch('intervaloIni'); });
     $('btnFimIntervalo').addEventListener('click', function(){ punch('intervaloFim'); });
@@ -993,9 +1140,10 @@
   }
 
   function refreshReport(){
+    if(!currentUser) return Promise.resolve();
     return apiGet('/api/records?start=' + reportRange.start + '&end=' + reportRange.end)
       .then(function(list){ reportRecords = list; renderReport(); })
-      .catch(function(err){ console.error('report error', err); showToast('Não foi possível carregar os relatórios.'); });
+      .catch(function(err){ console.error('report error', err); });
   }
 
   function filteredReportRecords(){
@@ -1168,33 +1316,31 @@
 
   /* ---------------- Init ---------------- */
 
+  function startPollingIfNeeded(){
+    if(pollingStarted) return;
+    pollingStarted = true;
+    setInterval(function(){
+      if(currentUser && $('panelKiosk').classList.contains('active')) refreshToday();
+    }, 5000);
+    setInterval(function(){
+      if(currentUser && $('panelReport').classList.contains('active')) refreshReport();
+    }, 8000);
+  }
+
   function init(){
     tickClock();
     setInterval(tickClock, 1000);
     setupTabs();
-    setupAddPerson();
     setupActionButtons();
     setupReportControls();
     setupModal();
-    renderKiosk();
-
-    try{
-      var saved = localStorage.getItem('ponto_certo_employee');
-      if(saved) selectedEmployeeId = saved;
-    }catch(e){}
+    setupAuthForms();
 
     loadEmployees().then(function(){
-      setRange('week');
-      if(selectedEmployeeId) refreshToday();
+      checkAuth();
     });
 
     setInterval(function(){ loadEmployees(); }, 15000);
-    setInterval(function(){
-      if($('panelKiosk').classList.contains('active') && selectedEmployeeId) refreshToday();
-    }, 5000);
-    setInterval(function(){
-      if($('panelReport').classList.contains('active')) refreshReport();
-    }, 8000);
   }
 
   if(document.readyState === 'loading'){

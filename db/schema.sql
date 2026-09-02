@@ -26,3 +26,6 @@ CREATE TABLE IF NOT EXISTS records (
 
 CREATE INDEX IF NOT EXISTS records_date_idx ON records (record_date);
 CREATE INDEX IF NOT EXISTS records_employee_idx ON records (employee_id);
+
+-- Login por funcionário (adicionado depois da primeira versão — por isso ALTER, não CREATE).
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS password_hash TEXT;

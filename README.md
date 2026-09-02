@@ -25,7 +25,10 @@ O servidor cria as tabelas automaticamente na primeira inicialização (`db/sche
    - Build command: `npm install`
    - Start command: `npm start`
    - Runtime: Node
-   - Variável de ambiente `DATABASE_URL`: cole a Internal Database URL do passo 2.
+   - Variáveis de ambiente:
+     - `DATABASE_URL`: cole a Internal Database URL do passo 2.
+     - `SESSION_SECRET`: uma string aleatória longa (usada para assinar o cookie de sessão).
+     - `ADMIN_PASSWORD`: a senha que você (admin) vai digitar toda vez que cadastrar uma pessoa nova.
 4. O deploy automático fica ligado por padrão — todo push na branch principal gera um novo deploy.
 5. Acesse a URL pública que o Render gerar (algo como `https://ponto-certo.onrender.com`).
 
@@ -39,12 +42,21 @@ db/schema.sql     schema do Postgres (criado automaticamente na inicialização)
 public/index.html frontend (kiosk de ponto + relatórios)
 ```
 
+## Login
+
+Cada pessoa entra com nome + senha (evita que alguém bata ponto pela outra). Você (admin) cadastra cada pessoa
+informando o nome, uma senha inicial para ela e a `ADMIN_PASSWORD` configurada no Render — a pessoa pode usar
+essa senha inicial normalmente depois (trocar a própria senha ainda não está implementado).
+
 ## API
 
-- `GET /api/employees` — lista funcionários
-- `POST /api/employees` — cria funcionário `{ name }`
-- `GET /api/records/today?employeeId=&date=` — registro do dia de um funcionário
-- `POST /api/records/punch` — bate ponto `{ employeeId, date, type, observacao? }` (`type`: `entrada` | `intervaloIni` | `intervaloFim` | `saida`)
-- `PATCH /api/records/:id/observacao` — atualiza a observação de um registro `{ observacao }`
-- `PUT /api/records/:id` — edição manual (admin) `{ entrada, inicioIntervalo, fimIntervalo, saida, observacao }`
-- `GET /api/records?start=&end=&employeeId=` — relatório por período
+- `GET /api/employees` — lista funcionários (pública, usada para preencher o seletor de nome no login)
+- `POST /api/employees` — cadastra funcionário `{ name, password, adminPassword }` (requer `adminPassword` correta)
+- `POST /api/login` — autentica `{ name, password }`, cria sessão
+- `POST /api/logout` — encerra a sessão
+- `GET /api/me` — retorna o usuário da sessão atual (ou `null`)
+- `GET /api/records/today?date=` — registro do dia do usuário logado (requer sessão)
+- `POST /api/records/punch` — bate ponto `{ date, type, observacao? }` (`type`: `entrada` | `intervaloIni` | `intervaloFim` | `saida`) (requer sessão)
+- `PATCH /api/records/:id/observacao` — atualiza a observação de um registro `{ observacao }` (requer sessão)
+- `PUT /api/records/:id` — edição manual `{ entrada, inicioIntervalo, fimIntervalo, saida, observacao }` (requer sessão)
+- `GET /api/records?start=&end=&employeeId=` — relatório por período (requer sessão)

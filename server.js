@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_EMPLOYEE_NAME = process.env.ADMIN_EMPLOYEE_NAME;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL não definido. Configure a variável de ambiente antes de iniciar o servidor.');
@@ -40,8 +41,10 @@ const PUNCH_FIELDS = {
   saida: 'saida',
 };
 
+const HORAS_NORMAIS_MIN = 8 * 60;
+
 function employeeRowToJson(row) {
-  return { id: String(row.id), name: row.name, createdAt: row.created_at };
+  return { id: String(row.id), name: row.name, isAdmin: !!row.is_admin, createdAt: row.created_at };
 }
 
 function recordRowToJson(row) {
@@ -55,6 +58,7 @@ function recordRowToJson(row) {
     fimIntervalo: row.fim_intervalo,
     saida: row.saida,
     observacao: row.observacao || '',
+    status: row.status || 'aprovado',
     editadoManualmente: row.editado_manualmente,
     editadoEm: row.editado_em,
     updatedAt: row.updated_at,
@@ -64,6 +68,22 @@ function recordRowToJson(row) {
 async function runMigrations() {
   const sql = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8');
   await pool.query(sql);
+}
+
+async function ensureBootstrapAdmin() {
+  const bootstrapName = (ADMIN_EMPLOYEE_NAME || '').trim();
+  if (!bootstrapName) return;
+  try {
+    const { rowCount } = await pool.query(
+      'UPDATE employees SET is_admin = true WHERE LOWER(name) = LOWER($1) AND is_admin = false',
+      [bootstrapName]
+    );
+    if (rowCount > 0) {
+      console.log(`"${bootstrapName}" marcado(a) como gestor(a) via ADMIN_EMPLOYEE_NAME.`);
+    }
+  } catch (err) {
+    console.error('Falha ao aplicar ADMIN_EMPLOYEE_NAME:', err);
+  }
 }
 
 async function waitForDb(retries, delayMs) {
@@ -103,13 +123,21 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireAdmin(req, res, next) {
+  if (!req.session || !req.session.isAdmin) {
+    return res.status(403).json({ error: 'Apenas o gestor pode fazer isso.' });
+  }
+  next();
+}
+
 /* ---------------- Auth ---------------- */
 
 app.get('/api/me', async (req, res, next) => {
   try {
     if (!req.session || !req.session.employeeId) return res.json(null);
     const { rows } = await pool.query('SELECT * FROM employees WHERE id = $1', [req.session.employeeId]);
-    if (rows.length === 0) { req.session.employeeId = null; return res.json(null); }
+    if (rows.length === 0) { req.session.employeeId = null; req.session.isAdmin = false; return res.json(null); }
+    req.session.isAdmin = !!rows[0].is_admin;
     res.json(employeeRowToJson(rows[0]));
   } catch (err) { next(err); }
 });
@@ -128,6 +156,7 @@ app.post('/api/login', async (req, res, next) => {
     if (!ok) return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
 
     req.session.employeeId = emp.id;
+    req.session.isAdmin = !!emp.is_admin;
     res.json(employeeRowToJson(emp));
   } catch (err) { next(err); }
 });
@@ -155,6 +184,7 @@ app.post('/api/employees', async (req, res, next) => {
     const name = (req.body && req.body.name || '').trim();
     const password = (req.body && req.body.password) || '';
     const adminPassword = (req.body && req.body.adminPassword) || '';
+    const isAdminFlag = !!(req.body && req.body.isAdmin);
 
     if (adminPassword !== ADMIN_PASSWORD) {
       return res.status(403).json({ error: 'Senha de administrador incorreta.' });
@@ -170,8 +200,8 @@ app.post('/api/employees', async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
-      'INSERT INTO employees (name, password_hash) VALUES ($1, $2) RETURNING *',
-      [name, passwordHash]
+      'INSERT INTO employees (name, password_hash, is_admin) VALUES ($1, $2, $3) RETURNING *',
+      [name, passwordHash, isAdminFlag]
     );
     res.status(201).json(employeeRowToJson(rows[0]));
   } catch (err) {
@@ -183,6 +213,18 @@ app.post('/api/employees', async (req, res, next) => {
 });
 
 /* ---------------- Records ---------------- */
+
+app.get('/api/records/pending', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.*, e.name AS employee_name
+       FROM records r JOIN employees e ON e.id = r.employee_id
+       WHERE r.status = 'pendente'
+       ORDER BY r.editado_em DESC NULLS LAST, r.record_date DESC`
+    );
+    res.json(rows.map(recordRowToJson));
+  } catch (err) { next(err); }
+});
 
 app.get('/api/records', requireAuth, async (req, res, next) => {
   try {
@@ -232,7 +274,7 @@ app.post('/api/records/punch', requireAuth, async (req, res, next) => {
 
     if (type === 'entrada') {
       if (existing && existing.entrada) {
-        return res.status(409).json({ error: 'Entrada já registrada hoje.' });
+        return res.status(409).json({ error: 'Entrada já registrada nesse dia.' });
       }
       let row;
       if (!existing) {
@@ -264,7 +306,7 @@ app.post('/api/records/punch', requireAuth, async (req, res, next) => {
       return res.status(409).json({ error: 'Intervalo ainda não foi iniciado ou já foi finalizado.' });
     }
     if (type === 'saida' && existing.saida) {
-      return res.status(409).json({ error: 'Saída já registrada hoje.' });
+      return res.status(409).json({ error: 'Saída já registrada nesse dia.' });
     }
 
     const upd = await pool.query(
@@ -297,7 +339,8 @@ app.put('/api/records/:id', requireAuth, async (req, res, next) => {
     const { rows } = await pool.query(
       `UPDATE records SET
          entrada = $1, inicio_intervalo = $2, fim_intervalo = $3, saida = $4,
-         observacao = $5, editado_manualmente = true, editado_em = now(), updated_at = now()
+         observacao = $5, editado_manualmente = true, editado_em = now(), updated_at = now(),
+         status = 'pendente'
        WHERE id = $6 RETURNING *`,
       [entrada || null, inicioIntervalo || null, fimIntervalo || null, saida || null, (observacao || '').trim(), id]
     );
@@ -306,6 +349,34 @@ app.put('/api/records/:id', requireAuth, async (req, res, next) => {
     res.json(recordRowToJson(withName.rows[0]));
   } catch (err) { next(err); }
 });
+
+app.post('/api/records/:id/approve', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(
+      `UPDATE records SET status = 'aprovado', updated_at = now() WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Registro não encontrado.' });
+    const withName = await pool.query('SELECT r.*, e.name AS employee_name FROM records r JOIN employees e ON e.id = r.employee_id WHERE r.id = $1', [id]);
+    res.json(recordRowToJson(withName.rows[0]));
+  } catch (err) { next(err); }
+});
+
+app.post('/api/records/:id/reject', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(
+      `UPDATE records SET status = 'rejeitado', updated_at = now() WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Registro não encontrado.' });
+    const withName = await pool.query('SELECT r.*, e.name AS employee_name FROM records r JOIN employees e ON e.id = r.employee_id WHERE r.id = $1', [id]);
+    res.json(recordRowToJson(withName.rows[0]));
+  } catch (err) { next(err); }
+});
+
+app.get('/api/config', (req, res) => res.json({ horasNormaisMin: HORAS_NORMAIS_MIN }));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -321,6 +392,7 @@ app.use((err, req, res, next) => {
 
 waitForDb(20, 1500)
   .then(runMigrations)
+  .then(ensureBootstrapAdmin)
   .then(() => {
     app.listen(PORT, () => console.log(`Ponto Accerte rodando na porta ${PORT}`));
   })

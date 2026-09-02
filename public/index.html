@@ -374,6 +374,42 @@
   }
   .register-block h3{ font-size:14px; margin-bottom:2px; }
   .register-block .sub-note{ font-size:12px; color:var(--text-faint); margin-bottom:14px; }
+  .checkbox-row{ display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .checkbox-row input[type="checkbox"]{ width:16px; height:16px; accent-color:var(--accent); }
+  .checkbox-row label{ font-size:12.5px; color:var(--text-secondary); margin:0; }
+
+  .date-row{ display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .date-row input[type="date"]{
+    flex:1; min-width:0;
+    background:var(--surface-alt);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    padding:10px 12px;
+    color:var(--text);
+  }
+  .date-row .today-btn{
+    flex-shrink:0;
+    border:1px solid var(--border);
+    background:var(--surface-alt);
+    color:var(--text);
+    font-weight:700;
+    font-size:12.5px;
+    padding:0 14px;
+    height:100%;
+    border-radius:var(--radius-sm);
+    cursor:pointer;
+  }
+  .date-row .today-btn:hover{ background:var(--accent-wash); color:var(--accent); }
+  .past-date-hint{
+    display:flex; align-items:center; gap:7px;
+    background:var(--warning-bg); color:var(--warning);
+    font-size:12px; font-weight:600;
+    padding:8px 12px; border-radius:var(--radius-sm);
+    margin:-6px 0 14px;
+  }
+  .badge.pending{ background:var(--warning-bg); color:var(--warning); }
+  .badge.rejected{ background:var(--danger-bg); color:var(--danger); }
+  .extra-hours{ color:var(--warning); font-weight:700; }
 
   /* ---- Reports ---- */
   .report-controls{
@@ -606,6 +642,10 @@
             <label for="regAdminPassword">Senha de administrador</label>
             <input type="password" id="regAdminPassword" autocomplete="off" required>
           </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="regIsAdmin">
+            <label for="regIsAdmin">Esta pessoa também é gestora (pode aprovar edições)</label>
+          </div>
           <div class="auth-error" id="registerError" hidden></div>
           <button type="submit" class="btn primary" id="registerSubmitBtn" style="width:100%;">Cadastrar e entrar</button>
         </form>
@@ -618,6 +658,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab-btn active" id="tabBtnKiosk" role="tab" aria-selected="true">Bater ponto</button>
       <button class="tab-btn" id="tabBtnReport" role="tab" aria-selected="false">Relatórios</button>
+      <button class="tab-btn" id="tabBtnApprovals" role="tab" aria-selected="false" hidden>Aprovações</button>
     </nav>
 
     <!-- KIOSK PANEL -->
@@ -629,6 +670,12 @@
         </div>
 
         <div class="card">
+          <div class="date-row">
+            <input type="date" id="punchDateInput" aria-label="Data do registro">
+            <button type="button" class="today-btn" id="punchDateToday" hidden>Hoje</button>
+          </div>
+          <div class="past-date-hint" id="pastDateHint" hidden>Registrando para um dia anterior — confira a data antes de bater o ponto.</div>
+
           <div class="status-pill" id="statusPill">
             <span class="dot"></span>
             <span id="statusText">Carregando…</span>
@@ -691,6 +738,7 @@
         <div class="stat-tile"><div class="label">Horas no período</div><div class="value tabular" id="statTotalHoras">0h00</div></div>
         <div class="stat-tile"><div class="label">Jornadas completas</div><div class="value tabular" id="statDias">0</div></div>
         <div class="stat-tile"><div class="label">Média por jornada</div><div class="value tabular" id="statMedia">0h00</div></div>
+        <div class="stat-tile warn"><div class="label">Horas extras</div><div class="value tabular" id="statExtras">0h00</div></div>
         <div class="stat-tile warn"><div class="label">Jornadas em aberto</div><div class="value tabular" id="statAbertas">0</div></div>
       </div>
 
@@ -698,11 +746,28 @@
         <table>
           <thead>
             <tr>
-              <th>Funcionário</th><th>Data</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Horas</th><th>Observação</th><th></th>
+              <th>Funcionário</th><th>Data</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Horas</th><th>Extra</th><th>Observação</th><th></th>
             </tr>
           </thead>
           <tbody id="reportTbody">
-            <tr class="empty-row"><td colspan="8">Sem registros no período selecionado.</td></tr>
+            <tr class="empty-row"><td colspan="9">Sem registros no período selecionado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- APPROVALS PANEL -->
+    <section class="panel" id="panelApprovals">
+      <div class="hint" style="margin:0 0 16px;">Edições manuais de ponto ficam pendentes aqui até você aprovar ou rejeitar.</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Funcionário</th><th>Data</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Horas</th><th>Observação</th><th>Editado em</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="approvalsTbody">
+            <tr class="empty-row"><td colspan="9">Nenhum registro pendente.</td></tr>
           </tbody>
         </table>
       </div>
@@ -740,11 +805,14 @@
   var employees = [];
   var currentUser = null;
   var currentRecord = null;
+  var selectedDate = null;
   var reportRecords = [];
+  var approvalRecords = [];
   var reportRange = { start: null, end: null };
   var editingRecordId = null;
   var connOk = false;
   var pollingStarted = false;
+  var horasNormaisMin = 8 * 60;
 
   function $(id){ return document.getElementById(id); }
   function pad(n){ return String(n).padStart(2,'0'); }
@@ -823,20 +891,28 @@
     if($('liveDateLogin')) $('liveDateLogin').textContent = ds;
   }
 
+  var tabDefs = null;
   function setupTabs(){
-    var btnK = $('tabBtnKiosk'), btnR = $('tabBtnReport'), pK = $('panelKiosk'), pR = $('panelReport');
-    btnK.addEventListener('click', function(){
-      btnK.classList.add('active'); btnK.setAttribute('aria-selected','true');
-      btnR.classList.remove('active'); btnR.setAttribute('aria-selected','false');
-      pK.classList.add('active'); pR.classList.remove('active');
-      refreshToday();
+    tabDefs = [
+      { btn: $('tabBtnKiosk'), panel: $('panelKiosk'), onShow: refreshToday },
+      { btn: $('tabBtnReport'), panel: $('panelReport'), onShow: refreshReport },
+      { btn: $('tabBtnApprovals'), panel: $('panelApprovals'), onShow: refreshApprovals }
+    ];
+    tabDefs.forEach(function(t){
+      t.btn.addEventListener('click', function(){ activateTab(t); });
     });
-    btnR.addEventListener('click', function(){
-      btnR.classList.add('active'); btnR.setAttribute('aria-selected','true');
-      btnK.classList.remove('active'); btnK.setAttribute('aria-selected','false');
-      pR.classList.add('active'); pK.classList.remove('active');
-      refreshReport();
+  }
+  function activateTab(target){
+    tabDefs.forEach(function(t){
+      var active = t === target;
+      t.btn.classList.toggle('active', active);
+      t.btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      t.panel.classList.toggle('active', active);
     });
+    target.onShow();
+  }
+  function resetToKioskTab(){
+    if(tabDefs) activateTab(tabDefs[0]);
   }
 
   function setConnStatus(state){
@@ -935,10 +1011,12 @@
     $('loginShell').hidden = true;
     $('appShell').hidden = false;
     $('userChip').hidden = false;
-    $('userChipName').textContent = currentUser.name;
+    $('userChipName').textContent = currentUser.name + (currentUser.isAdmin ? ' · gestor' : '');
+    $('tabBtnApprovals').hidden = !currentUser.isAdmin;
     startPollingIfNeeded();
+    initPunchDate();
+    resetToKioskTab();
     setRange('week');
-    refreshToday();
   }
 
   function showLogin(){
@@ -994,6 +1072,7 @@
       var name = $('regName').value.trim();
       var password = $('regPassword').value;
       var adminPassword = $('regAdminPassword').value;
+      var isAdminFlag = $('regIsAdmin').checked;
       hideAuthError('registerError');
       if(!name || !password || !adminPassword){
         showAuthError('registerError', 'Preencha todos os campos.');
@@ -1001,7 +1080,7 @@
       }
       var btn = $('registerSubmitBtn');
       btn.disabled = true;
-      apiSend('POST', '/api/employees', { name: name, password: password, adminPassword: adminPassword }).then(function(){
+      apiSend('POST', '/api/employees', { name: name, password: password, adminPassword: adminPassword, isAdmin: isAdminFlag }).then(function(){
         return apiSend('POST', '/api/login', { name: name, password: password });
       }).then(function(user){
         currentUser = user;
@@ -1028,25 +1107,57 @@
 
   /* ---------------- Kiosk / today's record ---------------- */
 
+  function initPunchDate(){
+    selectedDate = localDateStr();
+    var input = $('punchDateInput');
+    input.max = localDateStr();
+    input.value = selectedDate;
+    updatePastDateHint();
+  }
+
+  function updatePastDateHint(){
+    var isToday = selectedDate === localDateStr();
+    $('pastDateHint').hidden = isToday;
+    $('punchDateToday').hidden = isToday;
+  }
+
+  function setupDateSelector(){
+    var input = $('punchDateInput');
+    input.addEventListener('change', function(){
+      var today = localDateStr();
+      if(!input.value || input.value > today){ input.value = selectedDate || today; return; }
+      selectedDate = input.value;
+      updatePastDateHint();
+      refreshToday();
+    });
+    $('punchDateToday').addEventListener('click', function(){
+      selectedDate = localDateStr();
+      input.value = selectedDate;
+      updatePastDateHint();
+      refreshToday();
+    });
+  }
+
   function refreshToday(){
-    if(!currentUser) return Promise.resolve();
-    var date = localDateStr();
-    return apiGet('/api/records/today?date=' + date)
+    if(!currentUser || !selectedDate) return Promise.resolve();
+    return apiGet('/api/records/today?date=' + selectedDate)
       .then(function(rec){ currentRecord = rec; renderKiosk(); })
       .catch(function(err){ console.error('today error', err); });
   }
 
   function renderKiosk(){
     if(!currentUser) return;
+    var isToday = selectedDate === localDateStr();
+    var dayLabel = isToday ? 'hoje' : ('em ' + dateStrBR(selectedDate));
     var state = deriveState(currentRecord);
     var pill = $('statusPill'), text = $('statusText');
     pill.classList.remove('working','break','done');
 
     if(state === 'NONE'){
-      text.textContent = 'Ainda não bateu ponto hoje.';
+      text.textContent = 'Ainda não bateu ponto ' + dayLabel + '.';
     } else if(state === 'TRABALHANDO'){
       pill.classList.add('working');
-      text.textContent = 'Trabalhando desde ' + timeStr(currentRecord.entrada) + '.';
+      text.textContent = (isToday ? 'Trabalhando' : 'Registrado como trabalhando') + ' desde ' + timeStr(currentRecord.entrada) + '.';
     } else if(state === 'INTERVALO'){
       pill.classList.add('break');
       text.textContent = 'Em intervalo desde ' + timeStr(currentRecord.inicioIntervalo) + '.';
@@ -1092,9 +1203,8 @@
   }
 
   function punch(type){
-    if(!currentUser) return;
-    var date = localDateStr();
-    var body = { date: date, type: type };
+    if(!currentUser || !selectedDate) return;
+    var body = { date: selectedDate, type: type };
     if(type === 'entrada') body.observacao = $('obsInput').value.trim();
     apiSend('POST', '/api/records/punch', body).then(function(rec){
       currentRecord = rec;
@@ -1157,12 +1267,23 @@
     return list;
   }
 
+  function extraMinutos(min){
+    if(min == null || min < 0) return 0;
+    return Math.max(0, min - horasNormaisMin);
+  }
+
+  function statusBadge(r){
+    if(r.status === 'pendente') return '<span class="badge pending">pendente</span>';
+    if(r.status === 'rejeitado') return '<span class="badge rejected">rejeitado</span>';
+    return '';
+  }
+
   function renderReport(){
     var list = filteredReportRecords();
     var tbody = $('reportTbody');
 
     if(list.length === 0){
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Sem registros no período selecionado.</td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Sem registros no período selecionado.</td></tr>';
     } else {
       tbody.innerHTML = list.map(function(r){
         var min = calcMinutosRaw(r);
@@ -1170,8 +1291,10 @@
         if(min == null){ hoursCell = '<span class="mono">—</span>'; }
         else if(min < 0){ hoursCell = '<span class="warn-hours">verificar</span>'; }
         else { hoursCell = '<span class="mono">' + formatMin(min) + '</span>'; }
+        var extra = extraMinutos(min);
+        var extraCell = extra > 0 ? '<span class="mono extra-hours">+' + formatMin(extra) + '</span>' : '<span class="mono">—</span>';
         var intervalo = (r.inicioIntervalo || r.fimIntervalo) ? (timeStr(r.inicioIntervalo) + '–' + timeStr(r.fimIntervalo)) : '—';
-        var badge = r.editadoManualmente ? '<span class="badge">editado</span>' : '';
+        var badge = (r.editadoManualmente ? '<span class="badge">editado</span>' : '') + statusBadge(r);
         var obs = r.observacao ? r.observacao : '';
         return '<tr>' +
           '<td class="emp">' + escapeHtml(r.employeeName || '—') + badge + '</td>' +
@@ -1180,6 +1303,7 @@
           '<td class="mono">' + intervalo + '</td>' +
           '<td class="mono">' + timeStr(r.saida) + '</td>' +
           '<td>' + hoursCell + '</td>' +
+          '<td>' + extraCell + '</td>' +
           '<td class="obs-cell" title="' + escapeHtml(obs) + '">' + escapeHtml(obs || '—') + '</td>' +
           '<td><button class="edit-btn" data-id="' + r.id + '">Editar</button></td>' +
         '</tr>';
@@ -1189,15 +1313,16 @@
       });
     }
 
-    var totalMin = 0, dias = 0, abertas = 0;
+    var totalMin = 0, dias = 0, abertas = 0, extraMin = 0;
     list.forEach(function(r){
       var min = calcMinutosRaw(r);
-      if(min != null && min >= 0){ totalMin += min; dias++; }
+      if(min != null && min >= 0){ totalMin += min; dias++; extraMin += extraMinutos(min); }
       else if(!r.saida && r.entrada){ abertas++; }
     });
     $('statTotalHoras').textContent = formatMin(totalMin);
     $('statDias').textContent = String(dias);
     $('statMedia').textContent = dias > 0 ? formatMin(Math.round(totalMin/dias)) : '0h00';
+    $('statExtras').textContent = formatMin(extraMin);
     $('statAbertas').textContent = String(abertas);
 
     $('exportBtn').disabled = list.length === 0;
@@ -1298,9 +1423,10 @@
       observacao: $('editObs').value.trim()
     };
     apiSend('PUT', '/api/records/' + rec.id, patch).then(function(){
-      showToast('Registro atualizado.');
+      showToast('Registro atualizado — aguardando aprovação do gestor.');
       closeEditModal();
       refreshReport();
+      if(currentUser && currentUser.isAdmin) refreshApprovals();
       if(currentRecord && currentRecord.id === rec.id) refreshToday();
     }).catch(function(err){
       console.error(err);
@@ -1314,6 +1440,59 @@
     $('editOverlay').addEventListener('click', function(ev){ if(ev.target === $('editOverlay')) closeEditModal(); });
   }
 
+  /* ---------------- Approvals (gestor) ---------------- */
+
+  function refreshApprovals(){
+    if(!currentUser || !currentUser.isAdmin) return Promise.resolve();
+    return apiGet('/api/records/pending')
+      .then(function(list){ approvalRecords = list; renderApprovals(); })
+      .catch(function(err){ console.error('pending error', err); });
+  }
+
+  function renderApprovals(){
+    var tbody = $('approvalsTbody');
+    if(approvalRecords.length === 0){
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Nenhum registro pendente.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = approvalRecords.map(function(r){
+      var min = calcMinutosRaw(r);
+      var hoursCell = min == null ? '—' : (min < 0 ? 'verificar' : formatMin(min));
+      var intervalo = (r.inicioIntervalo || r.fimIntervalo) ? (timeStr(r.inicioIntervalo) + '–' + timeStr(r.fimIntervalo)) : '—';
+      var obs = r.observacao ? r.observacao : '';
+      return '<tr>' +
+        '<td class="emp">' + escapeHtml(r.employeeName || '—') + '</td>' +
+        '<td class="mono">' + weekdayShort(r.date) + ' ' + dateStrBR(r.date) + '</td>' +
+        '<td class="mono">' + timeStr(r.entrada) + '</td>' +
+        '<td class="mono">' + intervalo + '</td>' +
+        '<td class="mono">' + timeStr(r.saida) + '</td>' +
+        '<td class="mono">' + hoursCell + '</td>' +
+        '<td class="obs-cell" title="' + escapeHtml(obs) + '">' + escapeHtml(obs || '—') + '</td>' +
+        '<td class="mono">' + timeStr(r.editadoEm) + '</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<button class="edit-btn" data-action="approve" data-id="' + r.id + '">Aprovar</button> ' +
+          '<button class="edit-btn" data-action="reject" data-id="' + r.id + '">Rejeitar</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+    [].slice.call(tbody.querySelectorAll('[data-action]')).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        decideApproval(btn.getAttribute('data-id'), btn.getAttribute('data-action'));
+      });
+    });
+  }
+
+  function decideApproval(id, action){
+    apiSend('POST', '/api/records/' + id + '/' + action, {}).then(function(){
+      showToast(action === 'approve' ? 'Registro aprovado.' : 'Registro rejeitado.');
+      refreshApprovals();
+      refreshReport();
+    }).catch(function(err){
+      console.error(err);
+      showToast('Não foi possível concluir a ação.');
+    });
+  }
+
   /* ---------------- Init ---------------- */
 
   function startPollingIfNeeded(){
@@ -1325,6 +1504,15 @@
     setInterval(function(){
       if(currentUser && $('panelReport').classList.contains('active')) refreshReport();
     }, 8000);
+    setInterval(function(){
+      if(currentUser && currentUser.isAdmin && $('panelApprovals').classList.contains('active')) refreshApprovals();
+    }, 8000);
+  }
+
+  function loadConfig(){
+    return apiGet('/api/config').then(function(cfg){
+      if(cfg && cfg.horasNormaisMin) horasNormaisMin = cfg.horasNormaisMin;
+    }).catch(function(err){ console.error('config error', err); });
   }
 
   function init(){
@@ -1332,10 +1520,12 @@
     setInterval(tickClock, 1000);
     setupTabs();
     setupActionButtons();
+    setupDateSelector();
     setupReportControls();
     setupModal();
     setupAuthForms();
 
+    loadConfig();
     loadEmployees().then(function(){
       checkAuth();
     });

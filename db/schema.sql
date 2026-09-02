@@ -29,3 +29,7 @@ CREATE INDEX IF NOT EXISTS records_employee_idx ON records (employee_id);
 
 -- Login por funcionário (adicionado depois da primeira versão — por isso ALTER, não CREATE).
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+-- Gestor (aprova edições manuais) e status de aprovação do registro.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE records ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'aprovado';
